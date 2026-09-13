@@ -1,23 +1,13 @@
-"""
-Generative reasoning layer using Gemini.
-
-Takes the uploaded MRI image PLUS the evidence we already retrieved from
-Qdrant (and the zero-shot cross-check), and asks Gemini to write a short,
-evidence-grounded explanation - the "G" in RAG. Gemini is NOT asked to
-diagnose from scratch; it's asked to reason about evidence we already found,
-which is what keeps this system "accountable" rather than a black box.
-"""
 from PIL import Image
 from google import genai
 import time
 
 from config import GOOGLE_API_KEY, GEMINI_MODEL
 
-_client = None  # module-level singleton, same idea as BioMedCLIPEmbedder._instance
+_client = None
 
 
 def get_client() -> genai.Client:
-    """Reuse a single Gemini client instead of creating a new one per request."""
     global _client
     if _client is None:
         if not GOOGLE_API_KEY:
@@ -30,11 +20,6 @@ def get_client() -> genai.Client:
 
 
 def build_prompt(primary_diagnosis: str, matches: list[dict], zero_shot_result: dict) -> str:
-    """
-    Turns our retrieval results into a plain-text description Gemini can
-    reason over. We hand Gemini the EVIDENCE, not just an instruction to
-    guess - this is what makes the response grounded rather than invented.
-    """
     evidence_lines = "\n".join(
         f"  - {m['filename']}: labeled '{m['label']}', "
         f"similarity score {m['similarity_score']} (1.0 = identical)"
@@ -80,17 +65,9 @@ Specifically:
 
 
 def generate_report(image: Image.Image, primary_diagnosis: str, matches: list[dict], zero_shot_result: dict) -> str:
-    """
-    Sends the image + evidence summary to Gemini and returns its written
-    explanation as plain text.
-    """
     client = get_client()
     prompt = build_prompt(primary_diagnosis, matches, zero_shot_result)
 
-    # google-genai accepts a PIL Image directly alongside a text string in
-    # the same `contents` list - no manual base64 encoding needed.
-    # Retry a couple times on transient errors (e.g. 503 "high demand"),
-    # since these usually clear up within a few seconds.
     last_error = None
     for attempt in range(3):
         try:
@@ -102,5 +79,5 @@ def generate_report(image: Image.Image, primary_diagnosis: str, matches: list[di
         except Exception as e:
             last_error = e
             if attempt < 2:
-                time.sleep(2 * (attempt + 1))  # wait 2s, then 4s, before retrying
+                time.sleep(2 * (attempt + 1))
     raise last_error

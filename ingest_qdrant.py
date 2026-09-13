@@ -21,6 +21,8 @@ Run:
 """
 import os
 import uuid
+import argparse
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -65,8 +67,8 @@ def ensure_collection(client: QdrantClient):
     )
 
 
-def main():
-    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+def main(limit_per_class: int | None = None):
+    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
     ensure_collection(client)
 
     embedder = BioMedCLIPEmbedder.get()
@@ -77,10 +79,26 @@ def main():
         return
 
     print(f"[ingest] Found classes: {[f.name for f in class_folders]}")
+    if limit_per_class:
+        print(f"[ingest] TEST MODE: only processing {limit_per_class} images per class.")
 
     batch_points = []
-    BATCH_SIZE = 64
+    BATCH_SIZE = 32  # smaller than before - shorter requests are less likely to time out over the internet
     total_indexed = 0
+
+    def upsert_with_retry(points, attempts=3):
+        """Retry a batch upload a couple times before giving up - useful for
+        transient network hiccups when talking to a cloud service instead of
+        a local Docker container."""
+        for attempt in range(attempts):
+            try:
+                client.upsert(collection_name=QDRANT_COLLECTION, points=points)
+                return
+            except Exception as e:
+                if attempt == attempts - 1:
+                    raise
+                print(f"  [retry] Upload failed ({e}); retrying...")
+                time.sleep(3 * (attempt + 1))
 
     for class_folder in class_folders:
         label = class_folder.name
@@ -88,6 +106,8 @@ def main():
             p for p in class_folder.iterdir()
             if p.suffix.lower() in VALID_EXTS
         ]
+        if limit_per_class:
+            image_paths = image_paths[:limit_per_class]
         print(f"[ingest] {label}: {len(image_paths)} images")
 
         for img_path in tqdm(image_paths, desc=f"Embedding {label}"):
@@ -98,28 +118,43 @@ def main():
                 print(f"  [skip] {img_path} -> {e}")
                 continue
 
+            # Deterministic ID: uuid5 generates the SAME id every time for the
+            # same input string (unlike uuid4, which is random every call).
+            # This means re-running ingestion UPDATES existing points instead
+            # of creating duplicates - safe to re-run any time.
+            relative_path = f"{label}/{img_path.name}"
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+
             point = qmodels.PointStruct(
-                id=str(uuid.uuid4()),
+                id=point_id,
                 vector=vector,
                 payload={
                     "label": label,
                     "filename": img_path.name,
-                    "path": str(img_path.resolve()),
+                    "relative_path": relative_path,
                 },
             )
             batch_points.append(point)
 
             if len(batch_points) >= BATCH_SIZE:
-                client.upsert(collection_name=QDRANT_COLLECTION, points=batch_points)
+                upsert_with_retry(batch_points)
                 total_indexed += len(batch_points)
                 batch_points = []
 
     if batch_points:
-        client.upsert(collection_name=QDRANT_COLLECTION, points=batch_points)
+        upsert_with_retry(batch_points)
         total_indexed += len(batch_points)
 
     print(f"[ingest] Done. Indexed {total_indexed} images into '{QDRANT_COLLECTION}'.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Only ingest this many images per class (useful for a quick test run).",
+    )
+    args = parser.parse_args()
+    main(limit_per_class=args.limit)

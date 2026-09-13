@@ -6,8 +6,10 @@ python-multipart
 torch
 torchvision
 open_clip_torch
+transformers
 Pillow
 huggingface-hub
+tqdm
 
 qdrant-client
 google-genai

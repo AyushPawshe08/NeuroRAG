@@ -11,15 +11,21 @@ Run with:
 from io import BytesIO
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from qdrant_client import QdrantClient
 
-from config import QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, TOP_K
+from config import QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, TOP_K, DATASET_DIR
 from embedder import BioMedCLIPEmbedder
 from zero_shot import ZeroShotClassifier
 from gemini_report import generate_report
 
 app = FastAPI(title="Brain Tumor RAG API")
+
+# Serves the dataset images over HTTP at /images/<label>/<filename>,
+# so the Gradio dashboard (running on a different machine once deployed)
+# can actually load and display them.
+app.mount("/images", StaticFiles(directory=DATASET_DIR), name="images")
 
 # These are created once, when the server starts — not on every request.
 # Loading BioMedCLIP or reconnecting to Qdrant per-request would be very slow.
@@ -64,7 +70,7 @@ async def predict(file: UploadFile = File(...)):
         {
             "label": hit.payload.get("label"),
             "filename": hit.payload.get("filename"),
-            "path": hit.payload.get("path"),
+            "image_url": f"/images/{hit.payload.get('relative_path')}",
             "similarity_score": round(hit.score, 4),
         }
         for hit in results

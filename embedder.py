@@ -1,10 +1,3 @@
-"""
-Wraps BioMedCLIP to turn an MRI image into a normalized 512-dim feature vector.
-
-BioMedCLIP is a CLIP-style model pretrained on biomedical image-text pairs,
-so it captures medically-relevant visual features far better than a generic
-ImageNet-pretrained CLIP would.
-"""
 import torch
 from PIL import Image
 from open_clip import create_model_from_pretrained, get_tokenizer
@@ -13,7 +6,7 @@ from config import BIOMEDCLIP_MODEL
 
 
 class BioMedCLIPEmbedder:
-    _instance = None  # simple singleton so the model loads only once per process
+    _instance = None
 
     def __init__(self, device: str | None = None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,17 +18,12 @@ class BioMedCLIPEmbedder:
 
     @classmethod
     def get(cls) -> "BioMedCLIPEmbedder":
-        """Reuse a single loaded model instead of reloading weights every call."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
 
     @torch.no_grad()
     def embed_image(self, image: Image.Image) -> list[float]:
-        """
-        Takes a PIL image, returns an L2-normalized embedding as a plain
-        python list (ready to hand to Qdrant).
-        """
         image = image.convert("RGB")
         img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
         features = self.model.encode_image(img_tensor)
@@ -48,12 +36,6 @@ class BioMedCLIPEmbedder:
 
     @torch.no_grad()
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """
-        Takes a list of text prompts (e.g. ["glioma MRI", "normal brain MRI"])
-        and returns one L2-normalized embedding per prompt, using the SAME
-        loaded model as embed_image — so text and image vectors land in the
-        same comparable space, and we never load BioMedCLIP twice.
-        """
         text_tokens = self.tokenizer(texts).to(self.device)
         features = self.model.encode_text(text_tokens)
         features = features / features.norm(dim=-1, keepdim=True)
@@ -61,7 +43,6 @@ class BioMedCLIPEmbedder:
 
 
 if __name__ == "__main__":
-    # Quick smoke test: run `python embedder.py path/to/some_scan.jpg`
     import sys
 
     if len(sys.argv) < 2:
