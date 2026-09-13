@@ -13,20 +13,41 @@
 
 ## 🎥 Demo
 
-<!-- Replace this with your actual demo video/GIF -->
-**[▶️ Watch the full demo video here](#)**
+<video width="100%" controls>
+  <source src="./assets/Screen Recording 2026-09-13 135404.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
-<!-- Optional: add a GIF preview inline -->
-<!-- ![demo](./assets/demo.gif) -->
+### Dashboard Screenshots
 
-<!-- Add 1-2 screenshots of the Gradio dashboard here -->
-<!-- ![dashboard screenshot](./assets/screenshot.png) -->
+**Initial Upload Interface:**
+![Upload Interface](./assets/Screenshot%202026-09-13%20235736.png)
+
+**Retrieval Results & Evidence:**
+![Retrieval Results](./assets/Screenshot%202026-09-13%20235757.png)
+
+**Similar Cases Comparison:**
+![Similar Cases](./assets/Screenshot%202026-09-13%20235812.png)
+
+**Detailed Analysis View:**
+![Detailed Analysis](./assets/Screenshot%202026-09-13%20235848.png)
+
+**Final Diagnostic Report:**
+![Final Report](./assets/Screenshot%202026-09-13%20235908.png)
 
 ---
 
 ## 🩺 What problem does this solve?
 
-Standard AI diagnostic tools give a radiologist a label and a confidence score — a black box. This system instead works the way a second opinion actually works: it finds **real, similar historical cases with confirmed diagnoses**, shows them side-by-side with the new scan, and only *then* generates a written explanation grounded in that visible evidence. The radiologist can verify every claim against an actual image, not just trust a number.
+Standard AI diagnostic tools give a radiologist a label and a confidence score — a black box. This system instead works the way a second opinion actually works: it finds **real, similar historical cases** and asks the LLM to explain the diagnosis *based on that evidence*.
+
+Instead of:
+> "Tumor type: Glioma (95% confidence)"
+
+You get:
+> "The retrieval system found 5 similar cases, 4 of which were gliomas. The strongest match (0.98 similarity) was also a glioma. A separate text-based cross-check also agreed with glioma. **Diagnosis: Glioma** — confidence in the retrieval consensus, not in an opaque model."
+
+---
 
 ## ✨ Features
 
@@ -35,6 +56,8 @@ Standard AI diagnostic tools give a radiologist a label and a confidence score �
 - ✅ **Independent cross-check** — a separate zero-shot text-matching pass flags cases where the two methods disagree, surfacing ambiguity instead of hiding it
 - ⚖️ **Similarity-weighted voting** — a single near-perfect match correctly outweighs several weaker ones (not a naive majority count)
 - 🖼️ **Full visual transparency** — every retrieved comparison case is shown directly in the UI, not just referenced by filename
+
+---
 
 ## 🏗️ Architecture
 
@@ -53,9 +76,11 @@ Standard AI diagnostic tools give a radiologist a label and a confidence score �
  │ (embedder)  │→│  vector search │ │ cross-check│  │ (reasoning)    │
  └─────────────┘ └───────────────┘ └───────────┘  └───────────────┘
    image → 512-dim   top-K similar    independent      grounded written
-   vector             historical      text-based        explanation of
-                       cases          sanity check       the evidence
+   vector             historical       text-based       explanation of
+                       cases           sanity check      the evidence
 ```
+
+---
 
 ## 🛠️ Tech Stack
 
@@ -66,6 +91,8 @@ Standard AI diagnostic tools give a radiologist a label and a confidence score �
 | Reasoning | [Gemini](https://ai.google.dev/) (`google-genai`) |
 | UI | [Gradio](https://www.gradio.dev/) |
 | Backend (local dev) | [FastAPI](https://fastapi.tiangolo.com/) |
+
+---
 
 ## 📁 Dataset structure
 
@@ -79,13 +106,15 @@ data/train/
 └── pituitary/
 ```
 
+---
+
 ## 🚀 Getting Started
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/<your-username>/brain-mri-rag.git
-cd brain-mri-rag
+git clone https://github.com/AyushPawshe08/NeuroRAG.git
+cd NeuroRAG
 pip install -r requirements.txt
 ```
 
@@ -139,6 +168,8 @@ python gradio_app.py
 
 Open the printed local URL (usually `http://127.0.0.1:7860`) and upload a scan.
 
+---
+
 ## 💡 Usage Example
 
 Upload any brain MRI scan through the UI. You'll get back:
@@ -156,18 +187,24 @@ Upload any brain MRI scan through the UI. You'll get back:
 }
 ```
 
+---
+
 ## ⚠️ Known Limitations
 
 This is a decision-support demo, not a validated clinical tool:
 
 - BioMedCLIP is used **off-the-shelf (inference only)** — it was never fine-tuned on this specific dataset, so accuracy on visually ambiguous or out-of-distribution scans is limited
 - Trained/indexed on ~1,400 images per class — a small sample compared to production-grade medical AI systems
-- Similarity scores drop noticeably on genuinely unseen images (real-world test: ~0.89 vs ~0.98+ on in-distribution images) — this is expected behavior, not a bug, and is exactly why the zero-shot cross-check and Gemini's uncertainty flagging exist
+- Similarity scores drop noticeably on genuinely unseen images (real-world test: ~0.89 vs ~0.98+ on in-distribution images) — this is expected behavior, not a bug, and is exactly why the zero-shot cross-check exists
 - Not evaluated against a formal held-out test set with reported accuracy metrics (planned improvement)
+
+---
 
 ## ☁️ Deployment
 
-Deployed as a single [Hugging Face Space](https://huggingface.co/spaces) (Gradio SDK) with Qdrant Cloud as the managed vector database — see `app.py` for the self-contained deployment version (no separate backend service required).
+Deployed as a single [Hugging Face Space](https://huggingface.co/spaces) (Gradio SDK) with Qdrant Cloud as the managed vector database — see `app.py` for the self-contained deployment version.
+
+---
 
 ## 📄 License
 
